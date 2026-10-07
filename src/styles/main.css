@@ -2056,3 +2056,25 @@ kbd {
   margin-left: 6px;
   font-size: 15px;
 }
+
+/* Lanes in the graph view: a band per lane, links between lanes as arrows;
+   the lines from a lane to its bullets are the band itself. */
+.lane-band {
+  fill: color-mix(in srgb, var(--paper-raised) 80%, transparent);
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+.lane-band.odd {
+  fill: color-mix(in srgb, var(--grid) 55%, transparent);
+}
+.graph.lanes .edge-child {
+  display: none;
+}
+.lanes-toggle {
+  margin-right: 8px;
+}
+.lanes-toggle.on {
+  background: var(--ink);
+  color: var(--on-ink);
+  border-color: var(--ink);
+}
