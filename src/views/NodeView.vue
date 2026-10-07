@@ -22,7 +22,7 @@ import { useLoader } from '@/composables/useLoader'
 import { mergeRefs, refCache } from '@/state/refs'
 import { labelize } from '@/lib/tokens'
 import { KIND_NAMES } from '@/lib/kinds'
-import { subtreeIds } from '@/lib/treeOps'
+import { laneHint, subtreeIds } from '@/lib/treeOps'
 import { editing, focusEditor } from '@/state/focus'
 import { prefs } from '@/state/prefs'
 import { openLinkPicker } from '@/lib/linking'
@@ -299,6 +299,10 @@ function openMenu() {
   if (!node.value) return
   if (isRelation.value) return openRelationMenu()
   const actions: SheetAction[] = [{ label: 'Show graph', icon: 'graph', run: () => router.push(`/n/${props.id}/graph`) }]
+  // Two or more numbered lists side by side: swimlanes (laneHint).
+  if (laneHint(data.value?.tree)) {
+    actions.push({ label: 'Show as lanes', icon: 'list', run: () => router.push(`/n/${props.id}/graph?lanes=1`) })
+  }
   const tree = data.value?.tree
   if (tree) {
     actions.push({

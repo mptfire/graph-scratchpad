@@ -155,3 +155,12 @@ export function subtreeIds(node: TreeNode): string[] {
   walk(node)
   return out
 }
+
+/**
+ * Lanes are worth offering when the structure says so: two or more top
+ * bullets with numbered lists under them (processes side by side). Then every
+ * top bullet with something under it is a lane.
+ */
+export function laneHint(tree: TreeNode | null | undefined): boolean {
+  return (tree?.children.filter((c) => c.numbered && c.children.length > 0).length ?? 0) >= 2
+}

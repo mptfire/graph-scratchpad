@@ -5,6 +5,7 @@ import { pasteLines, typedMarker } from '../src/lib/editorDom'
 import { linkContexts } from '../src/lib/relations'
 import { linkedIds, lineCount, toHtml, toMarkdown } from '../src/lib/markdownOut'
 import { findUrls, urlAt } from '../src/lib/urls'
+import { laneHint } from '../src/lib/treeOps'
 import type { TreeNode } from '../src/db/types'
 
 const A = '11111111-1111-4111-8111-111111111111'
@@ -261,5 +262,34 @@ describe('web addresses in bullets', () => {
     expect(urlAt(t, 6)).toBe('https://example.com')
     expect(urlAt(t, 16)).toBe('https://example.com')
     expect(urlAt(t, 17)).toBeUndefined()
+  })
+})
+
+describe('when to offer lanes', () => {
+  const n = (o: Partial<TreeNode>, children: TreeNode[] = []): TreeNode => ({
+    id: Math.random().toString(36),
+    kind: 'item',
+    text: '',
+    done: false,
+    collapsed: false,
+    numbered: false,
+    task: false,
+    links: 0,
+    category: null,
+    ref: null,
+    children,
+    ...o,
+  })
+  const step = () => n({})
+
+  it('offers them for two or more numbered lists side by side, and not for an ordinary list', () => {
+    expect(laneHint(n({ kind: 'pad' }, [n({ numbered: true }, [step()]), n({ numbered: true }, [step(), step()])]))).toBe(true)
+    // One numbered list among notes (the welcome pad): no.
+    expect(laneHint(n({ kind: 'pad' }, [n({}, [step()]), n({ numbered: true }, [step()]), n({})]))).toBe(false)
+    // Nested lists that aren't numbered: no.
+    expect(laneHint(n({ kind: 'pad' }, [n({}, [step()]), n({}, [step()])]))).toBe(false)
+    // A numbered bullet with nothing under it doesn't count.
+    expect(laneHint(n({ kind: 'pad' }, [n({ numbered: true }, [step()]), n({ numbered: true })]))).toBe(false)
+    expect(laneHint(null)).toBe(false)
   })
 })

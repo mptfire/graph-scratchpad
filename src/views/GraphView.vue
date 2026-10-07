@@ -24,10 +24,11 @@ import 'd3-transition'
 import Icon from '@/components/Icon.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import { api } from '@/db/api'
-import type { GraphNode, Kind, Neighborhood } from '@/db/types'
+import type { GraphNode, Kind, Neighborhood, TreeNode } from '@/db/types'
 import { KIND_NAMES, singular } from '@/lib/kinds'
 import { categoryById } from '@/state/categories'
 import { reportError } from '@/state/ui'
+import { laneHint } from '@/lib/treeOps'
 
 const props = defineProps<{ id: string }>()
 const route = useRoute()
@@ -142,6 +143,145 @@ let loadSeq = 0
 let nextLayout: 'settle' | 'refocus' = 'settle'
 let lastInteraction = 0
 let refitTimer: ReturnType<typeof setTimeout> | undefined
+let resizes: ResizeObserver | undefined
+
+// Lanes: the page's top bullets as swimlanes (rows on a wide screen, columns on
+// a phone), each with what's under it in outline order, and links between
+// them as arrows. Laid out by rule, not by the simulation; the page stays the
+// root while you tap around (the card shows what you tapped).
+// On or off is in the URL (?lanes=1), so back and forward bring it with them.
+const lanes = computed(() => route.query.lanes === '1')
+/** The page's outline: fetched once to see whether lanes fit, and on every load while they're on. */
+const laneTree = shallowRef<TreeNode | null>(null)
+/** The page's top bullets with something under them: a lane each, when the page hints at lanes (laneHint). */
+const laneList = computed(() => laneTree.value?.children.filter((c) => c.children.length > 0) ?? [])
+const canLanes = computed(() => laneHint(laneTree.value))
+/** How many nodes a load brings at most: lanes show the whole page. */
+const nearest = computed(() => (lanes.value ? 400 : 150))
+let gLanes: Selection<SVGGElement, unknown, null, undefined> | null = null
+/** Lanes as columns (a phone, upright): labels go under the bullets, so they stay in their lane. */
+let laneColumns = false
+/** The lanes' bands, so fit frames them. */
+let laneBounds: Box | null = null
+/** In lanes, the most labels may grow in the drawing and still fit between bullets (layoutLanes). */
+let laneLabelMax = Infinity
+interface Box {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+interface Band {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  odd: boolean
+}
+
+function setLanes(on: boolean) {
+  const query = { ...route.query }
+  if (on) query.lanes = '1'
+  else delete query.lanes
+  delete query.focus
+  void router.replace({ query })
+}
+
+watch(lanes, (on) => {
+  if (!on) {
+    // Back to the simulation: let everything move again.
+    for (const n of simNodes) n.fx = n.fy = null
+    gLanes?.selectAll('*').remove()
+    laneBounds = null
+  }
+  nextLayout = 'settle'
+  void load()
+})
+
+function layoutLanes() {
+  const tree = laneTree.value
+  const el = svg.value
+  if (!tree || !el || !sim || !gLanes) return
+  sim.stop()
+  const rows = !laneColumns
+  const placed = new Set<string>()
+  const put = (id: string, x: number, y: number) => {
+    const n = byId.get(id)
+    if (!n) return
+    n.x = x
+    n.y = y
+    n.fx = x
+    n.fy = y
+    placed.add(id)
+  }
+  const flat = (nodes: TreeNode[], depth = 0): { id: string; depth: number }[] =>
+    nodes.flatMap((c) => [{ id: c.id, depth }, ...flat(c.children, depth + 1)])
+  const laneNodes = laneList.value
+  const laneSteps = laneNodes.map((lane) => flat(lane.children))
+  const longest = Math.max(1, ...laneSteps.map((s) => s.length))
+  // Rows: lanes stacked, bullets left to right. Columns: lanes side by side, bullets downwards.
+  const place = (LANE: number, STEP: number): Band[] => {
+    placed.clear()
+    const bands: Band[] = []
+    laneNodes.forEach((lane, i) => {
+      const steps = laneSteps[i]
+      if (rows) {
+        const y = i * LANE
+        put(lane.id, 0, y)
+        steps.forEach((s, k) => put(s.id, 200 + k * STEP, y + s.depth * 24))
+        bands.push({ id: lane.id, x: -80, y: y - LANE / 2 + 6, w: 260 + longest * STEP, h: LANE - 12, odd: i % 2 === 1 })
+      } else {
+        const x = i * LANE
+        put(lane.id, x, 0)
+        steps.forEach((s, k) => put(s.id, x + s.depth * 14, 90 + k * STEP))
+        bands.push({ id: lane.id, x: x - LANE / 2 + 6, y: -50, w: LANE - 12, h: 120 + longest * STEP, odd: i % 2 === 1 })
+      }
+    })
+    // The page itself in the corner (above the middle, in columns); what the lanes link to, in a row after them.
+    put(tree.id, rows ? -170 : ((laneNodes.length - 1) * LANE) / 2, rows ? -LANE * 0.75 : -120)
+    const outside = simNodes.filter((n) => !placed.has(n.id))
+    outside.forEach((n, k) =>
+      rows ? put(n.id, 200 + k * STEP, laneNodes.length * LANE + 30) : put(n.id, laneNodes.length * LANE + 40, 90 + k * STEP),
+    )
+    laneBounds = {
+      minX: Math.min(...bands.map((b) => b.x)),
+      minY: Math.min(...bands.map((b) => b.y)),
+      maxX: Math.max(...bands.map((b) => b.x + b.w)),
+      maxY: Math.max(...bands.map((b) => b.y + b.h)),
+    }
+    return bands
+  }
+  // The widest label needs room: beside its bullet up to the next one (rows), or across its lane
+  // (columns). Labels keep a readable size on screen as you zoom out, so the smaller the lanes are
+  // shown, the more of the drawing they take: space them for the zoom that fits it all, and again
+  // if that spacing makes it zoom out further.
+  const widest = Math.max(1, ...[...laneNodes, ...laneSteps.flat()].map((s) => byId.get(s.id)?.text.length ?? 0)) * CHAR_W
+  const ROOM = rows ? 34 : 24
+  let lane = rows ? 120 : 200
+  let step = rows ? 210 : 84
+  let bands = place(lane, step)
+  for (let i = 0; i < 4; i++) {
+    const need = widest * labelGrowth(fitScale(fitBox(), fitArea(el))) + ROOM
+    if (need <= (rows ? step : lane)) break
+    if (rows) step = need
+    else lane = need
+    bands = place(lane, step)
+  }
+  // Where even that won't do (many bullets on a narrow screen), labels shrink rather than overlap.
+  laneLabelMax = ((rows ? step : lane) - ROOM) / widest
+  gLanes
+    .selectAll<SVGRectElement, Band>('rect')
+    .data(bands, (b) => b.id)
+    .join('rect')
+    .attr('class', (b) => `lane-band${b.odd ? ' odd' : ''}`)
+    .attr('x', (b) => b.x)
+    .attr('y', (b) => b.y)
+    .attr('width', (b) => b.w)
+    .attr('height', (b) => b.h)
+    .attr('rx', 12)
+  ticked()
+}
 
 function truncate(s: string, n: number) {
   const t = s || 'Untitled'
@@ -151,10 +291,21 @@ function truncate(s: string, n: number) {
 async function load() {
   const my = ++loadSeq
   try {
-    const d = await api.getNeighborhood(focusId.value, hops.value, 150)
+    // In lanes, the page is the root (three steps reach its lanes' bullets and what they link to).
+    const [d, tree] = await Promise.all([
+      lanes.value ? api.getNeighborhood(props.id, 3, nearest.value) : api.getNeighborhood(focusId.value, hops.value, nearest.value),
+      lanes.value || !laneTree.value ? api.getTree(props.id) : laneTree.value,
+    ])
     if (my !== loadSeq) return
-    data.value = d
-    update(d)
+    laneTree.value = tree
+    // The page no longer has lanes (they were edited away): the ordinary graph.
+    if (lanes.value && !canLanes.value) return setLanes(false)
+    // In lanes, top bullets that aren't lanes (an intro note) stay out of the picture.
+    const off = new Set(lanes.value ? tree.children.filter((c) => !c.children.length).map((c) => c.id) : [])
+    data.value = off.size
+      ? { ...d, nodes: d.nodes.filter((n) => !off.has(n.id)), edges: d.edges.filter((e) => !off.has(e.src) && !off.has(e.dst)) }
+      : d
+    update(data.value)
   } catch (e) {
     reportError(e)
   }
@@ -162,6 +313,7 @@ async function load() {
 
 /** Merge a new neighborhood into the running simulation, keeping positions. */
 function update(d: Neighborhood) {
+  laneColumns = lanes.value && !!svg.value && svg.value.clientWidth < svg.value.clientHeight
   const busy = d.nodes.length > 18
   const anchor = byId.get(d.center)
   const fresh = new Set<string>()
@@ -186,8 +338,8 @@ function update(d: Neighborhood) {
     const base = n.tone != null ? RADIUS.place : RADIUS[n.kind]
     node.r = n.id === d.center ? base + 5 : node.order !== null ? 10 : base
     // Every bullet has a label. Numbered ones always show it (the order is the point).
-    node.text = truncate(n.label, n.id === d.center ? 26 : 22)
-    node.minor = busy && !major && node.order === null
+    node.text = truncate(n.label, n.id === d.center ? 26 : laneColumns ? 18 : 22)
+    node.minor = busy && !lanes.value && !major && node.order === null
     // The focus stays put; everything else is free (unless being dragged).
     if (n.id === d.center) {
       node.fx = node.x
@@ -211,7 +363,7 @@ function update(d: Neighborhood) {
       slot: e.index,
       phrase: e.phrase,
     }))
-  busyGraph = busy
+  busyGraph = busy && !lanes.value
   // New numbered items start in their slots, so the column forms already in order.
   for (const e of simEdges) {
     if (e.slot === undefined || !fresh.has(e.target.id)) continue
@@ -224,6 +376,12 @@ function update(d: Neighborhood) {
   ordered.links(simEdges)
   render()
   clearTimeout(refitTimer)
+  if (lanes.value) {
+    layoutLanes()
+    if (nextLayout === 'settle') fit(false)
+    nextLayout = 'refocus'
+    return
+  }
   if (nextLayout === 'settle') {
     // First open or a new distance: show a settled layout that fits.
     sim!.alpha(1).tick(300)
@@ -259,6 +417,9 @@ function allVisible(): boolean {
     return r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= limit
   })
 }
+
+/** Numbered bullets read like an outline, label to the right; others (and lanes in columns), label below. */
+const beside = (n: SimNode) => n.order !== null && n.id !== focusId.value && !laneColumns
 
 function render() {
   if (!gEdges || !gNodes) return
@@ -323,12 +484,12 @@ function render() {
   // (Offsets in em: labels keep their size on screen as you zoom; see setLabelScale.)
   nodes
     .select('text.label')
-    .attr('text-anchor', (n) => (n.order !== null && n.id !== focusId.value ? 'start' : 'middle'))
+    .attr('text-anchor', (n) => (beside(n) ? 'start' : 'middle'))
     // A few units clear of the rim (they grow with the outline as you zoom), then the label's own spacing.
-    .attr('x', (n) => (n.order !== null && n.id !== focusId.value ? n.r + 2 : 0))
-    .attr('dx', (n) => (n.order !== null && n.id !== focusId.value ? '0.35em' : null))
-    .attr('y', (n) => (n.order !== null && n.id !== focusId.value ? 0 : n.r + 3))
-    .attr('dy', (n) => (n.order !== null && n.id !== focusId.value ? '0.35em' : '1.05em'))
+    .attr('x', (n) => (beside(n) ? n.r + 2 : 0))
+    .attr('dx', (n) => (beside(n) ? '0.35em' : null))
+    .attr('y', (n) => (beside(n) ? 0 : n.r + 3))
+    .attr('dy', (n) => (beside(n) ? '0.35em' : '1.05em'))
     .text((n) => n.text)
   nodes.call(dragBehavior)
   nodes.on('click', (_ev, n) => setFocus(n.id))
@@ -363,9 +524,14 @@ function ticked() {
  * when zoomed out to fit (to three quarters), and don't grow when zoomed in, so
  * zooming in makes room between them for the far ones.
  */
+/** How much bigger than its base size a label is in the drawing at zoom k: on screen it keeps 75–100% of its size. */
+function labelGrowth(k: number) {
+  return Math.min(1, Math.max(0.75, k)) / k
+}
+
 function setLabelScale(k: number) {
-  const onScreen = Math.min(1, Math.max(0.75, k))
-  svg.value?.style.setProperty('--label-k', String(onScreen / k))
+  const g = lanes.value ? Math.min(labelGrowth(k), laneLabelMax) : labelGrowth(k)
+  svg.value?.style.setProperty('--label-k', String(g))
 }
 
 let declutterTimer: ReturnType<typeof setTimeout> | undefined
@@ -461,17 +627,19 @@ function centerOn(n: SimNode | undefined) {
     .call(zoomer.translateTo, n.x, n.y, [el.clientWidth / 2, Math.max(60, visibleH / 2)])
 }
 
-function fit(animate = true) {
-  const el = svg.value
-  if (!el || !zoomer || simNodes.length === 0) return
-  // Keep clear of the fit button (top) and the focus card (bottom).
+/** Where a fit puts things: clear of the fit button (top) and the focus card (bottom). */
+function fitArea(el: SVGSVGElement) {
   const card = el.parentElement?.querySelector<HTMLElement>('.focus-card')
   const top = 56
   const bottom = (card?.offsetHeight ?? 0) + 24
-  const w = el.clientWidth
-  const h = Math.max(120, el.clientHeight - top - bottom)
-  // Fit the bullets, with a little room for labels: a readable zoom matters more than
-  // every long label fitting (pan to read the ones that run off the edge).
+  return { top, w: el.clientWidth, h: Math.max(120, el.clientHeight - top - bottom) }
+}
+
+/**
+ * What a fit frames: the bullets, with a little room for labels (a readable zoom matters more than
+ * every long label fitting; pan to read the ones that run off the edge), and the lanes' bands.
+ */
+function fitBox(): Box {
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
@@ -482,11 +650,28 @@ function fit(animate = true) {
     minY = Math.min(minY, n.y - n.r - 12)
     maxY = Math.max(maxY, n.y + n.r + 28)
   }
-  const k = Math.min(1.6, w / (maxX - minX), h / (maxY - minY))
+  if (lanes.value && laneBounds) {
+    minX = Math.min(minX, laneBounds.minX)
+    minY = Math.min(minY, laneBounds.minY)
+    maxX = Math.max(maxX, laneBounds.maxX)
+    maxY = Math.max(maxY, laneBounds.maxY)
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+function fitScale(b: Box, a: { w: number; h: number }) {
+  return Math.min(1.6, a.w / (b.maxX - b.minX), a.h / (b.maxY - b.minY))
+}
+
+function fit(animate = true) {
+  const el = svg.value
+  if (!el || !zoomer || simNodes.length === 0) return
+  const a = fitArea(el)
+  const b = fitBox()
   const t = zoomIdentity
-    .translate(w / 2, top + h / 2)
-    .scale(k)
-    .translate(-(minX + maxX) / 2, -(minY + maxY) / 2)
+    .translate(a.w / 2, a.top + a.h / 2)
+    .scale(fitScale(b, a))
+    .translate(-(b.minX + b.maxX) / 2, -(b.minY + b.maxY) / 2)
   const s = select(el)
   if (animate) s.transition().duration(400).call(zoomer.transform, t)
   else s.call(zoomer.transform, t)
@@ -499,6 +684,7 @@ function openFocus() {
 onMounted(() => {
   const el = svg.value!
   const root = select(el).append('g').attr('class', 'graph-root')
+  gLanes = root.append('g').attr('class', 'lane-bands')
   gEdges = root.append('g').attr('class', 'edges')
   gEdgeLabels = root.append('g').attr('class', 'edge-labels')
   gNodes = root.append('g').attr('class', 'nodes')
@@ -535,12 +721,20 @@ onMounted(() => {
     .alphaDecay(0.035)
     .on('tick', ticked)
   sim.stop()
+  // A phone turned on its side: lanes go from columns to rows (and back).
+  resizes = new ResizeObserver(() => {
+    if (!lanes.value || !data.value || el.clientWidth < el.clientHeight === laneColumns) return
+    nextLayout = 'settle'
+    update(data.value)
+  })
+  resizes.observe(el)
   void load()
 })
 
 onBeforeUnmount(() => {
   clearTimeout(refitTimer)
   clearTimeout(declutterTimer)
+  resizes?.disconnect()
   sim?.stop()
   if (svg.value) select(svg.value).on('.zoom', null)
 })
@@ -554,7 +748,17 @@ onBeforeUnmount(() => {
         <span class="back-label">Back</span>
       </RouterLink>
       <span class="spacer" />
-      <div class="segmented" role="radiogroup" aria-label="Distance">
+      <button
+        v-if="canLanes"
+        type="button"
+        class="btn btn-small lanes-toggle"
+        :class="{ on: lanes }"
+        :aria-pressed="lanes"
+        @click="setLanes(!lanes)"
+      >
+        Lanes
+      </button>
+      <div v-if="!lanes" class="segmented" role="radiogroup" aria-label="Distance">
         <button
           v-for="h in [1, 2, 3]"
           :key="h"
@@ -569,7 +773,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
     <div class="graph-wrap">
-      <svg ref="svg" class="graph" role="img" aria-label="Graph of connected items">
+      <svg ref="svg" class="graph" :class="{ lanes }" role="img" aria-label="Graph of connected items">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0L10 5L0 10z" class="arrowhead" />
@@ -595,14 +799,14 @@ onBeforeUnmount(() => {
                     : 'Note'
                   : KIND_NAMES[focus.kind]
             }},
-            {{ data!.nodes.length - 1 }} nearby{{ data?.truncated ? ' (nearest 150)' : '' }}
+            {{ data!.nodes.length - 1 }} nearby{{ data?.truncated ? ` (nearest ${nearest})` : '' }}
           </span>
         </div>
         <button type="button" class="btn btn-small btn-primary" @click="openFocus">Open</button>
       </div>
     </div>
     <div class="graph-legend">
-      <span><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" class="edge-child" /></svg> Nested</span>
+      <span v-if="!lanes"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" class="edge-child" /></svg> Nested</span>
       <span><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" class="edge-link" /></svg> Link</span>
       <span class="legend-node"><svg width="14" height="14"><rect x="1.5" y="1.5" width="11" height="11" rx="2.5" /></svg> To-do</span>
       <span class="legend-node"><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" /></svg> Note</span>
