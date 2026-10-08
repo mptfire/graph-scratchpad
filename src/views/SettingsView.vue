@@ -12,6 +12,7 @@ import { installState, promptInstall } from '@/lib/install'
 import { MAX_PINNED, categories } from '@/state/categories'
 import { newCategory, togglePinned } from '@/lib/contextActions'
 import { setVimEnabled, vim } from '@/state/vim'
+import { MOD, showKeys } from '@/lib/shortcuts'
 import SyncSettings from '@/plugins/SyncSettings.vue'
 import { setTheme, theme, type ThemeChoice } from '@/lib/theme'
 import { APP_CONTACT, APP_NAME, APP_SITE, ISSUES_URL } from '@/lib/appName'
@@ -259,8 +260,8 @@ async function askPersist() {
       <section class="card vim-card">
         <h2 class="section-title">Keyboard</h2>
         <p class="note">
-          <kbd>Ctrl-K</kbd> searches: <kbd>↑</kbd> <kbd>↓</kbd> (or <kbd>Ctrl-N</kbd> <kbd>Ctrl-P</kbd>) pick a result, <kbd>Enter</kbd> opens it,
-          <kbd>Esc</kbd> goes back to where you were.
+          <kbd>{{ MOD }}-K</kbd> searches, <kbd>⇧{{ MOD }}-K</kbd> opens the menu of the line you’re on: <kbd>↑</kbd> <kbd>↓</kbd> (or
+          <kbd>Ctrl-N</kbd> <kbd>Ctrl-P</kbd>) pick, <kbd>Enter</kbd> chooses, <kbd>Esc</kbd> goes back. <kbd>?</kbd> shows all the shortcuts.
         </p>
         <p class="note">
           <template v-if="vim.enabled">
@@ -274,6 +275,7 @@ async function askPersist() {
           <template v-else>For a computer keyboard: edit with Vim’s normal and insert modes. Only on this device.</template>
         </p>
         <div class="btn-row">
+          <button type="button" class="btn" @click="showKeys">Keyboard shortcuts</button>
           <button type="button" class="btn" @click="setVimEnabled(!vim.enabled)">
             {{ vim.enabled ? 'Turn off Vim keys' : 'Turn on Vim keys' }}
           </button>

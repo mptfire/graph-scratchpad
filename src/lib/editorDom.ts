@@ -101,7 +101,7 @@ export function getCaret(el: HTMLElement): { start: number; end: number } | null
 
 export type CaretTarget = number | 'start' | 'end'
 
-export type Shortcut = 'toggle-done' | 'toggle-task' | 'move-up' | 'move-down' | 'collapse' | 'expand'
+export type Shortcut = 'toggle-done' | 'toggle-task' | 'move-up' | 'move-down' | 'collapse' | 'expand' | 'menu'
 
 /**
  * A line's kind, as written in Markdown: "[ ] …" / "[x] …" is a to-do, "- …" a

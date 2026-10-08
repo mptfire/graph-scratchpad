@@ -1349,7 +1349,8 @@ a {
   text-align: left;
 }
 
-.sheet-action:active {
+.sheet-action:active,
+.sheet-action.hl {
   background: var(--wash);
 }
 
@@ -1389,6 +1390,43 @@ a {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* The keyboard shortcuts (?): keys on the left, what they do on the right. */
+.keys-help {
+  max-width: 520px;
+  max-height: 88%;
+  overflow-y: auto;
+}
+
+.keys-group {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+/* The same key column in every group, so what they do lines up; a second way wraps below. */
+.keys-list {
+  display: grid;
+  grid-template-columns: 8.5em 1fr;
+  gap: 8px 16px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.keys-list dd {
+  margin: 0;
+}
+
+.keys-combo {
+  display: inline-block;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.keys-combo kbd + kbd {
+  margin-left: 3px;
 }
 
 .toasts {

@@ -458,6 +458,8 @@ function onShortcut(row: T.FlatRow, name: Shortcut) {
       return setCollapsed(row, true)
     case 'expand':
       return setCollapsed(row, false)
+    case 'menu':
+      return openMore(row)
   }
 }
 

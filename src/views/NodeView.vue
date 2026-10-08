@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import EditableText from '@/components/EditableText.vue'
 import Outline from '@/components/Outline.vue'
@@ -29,6 +29,7 @@ import { openLinkPicker } from '@/lib/linking'
 import type { VimRowAction } from '@/lib/vim'
 import { vimInsert } from '@/state/vim'
 import { vimOpen } from '@/lib/vimJumps'
+import { inTextField, isMenuKey, overlayOpen } from '@/lib/shortcuts'
 import { openUrl } from '@/lib/urls'
 import { chipClass, chipLabel, type LineMarker, type Shortcut } from '@/lib/editorDom'
 import { confirmDialog, openPicker, openSheet, pickerState, promptDialog, reportError, toast, type SheetAction } from '@/state/ui'
@@ -155,6 +156,8 @@ async function onTitleMarker(m: LineMarker) {
 function onTitleShortcut(name: Shortcut) {
   if (name === 'toggle-done') void toggleDone()
   else if (name === 'toggle-task') void toggleTask()
+  // The title has no ⋯ in the bar: the page's own menu (the ⋯ at the top).
+  else if (name === 'menu') openMenu()
 }
 
 async function toggleBacklink(id: string, done: boolean) {
@@ -363,6 +366,15 @@ onMounted(async () => {
   editTitle()
   void router.replace({ query: {} })
 })
+
+// Shift-Ctrl-K (⇧⌘K) with no line being edited: the page's menu. (A line's own goes through onShortcut.)
+function onMenuKey(e: KeyboardEvent) {
+  if (e.defaultPrevented || !isMenuKey(e) || overlayOpen() || inTextField()) return
+  e.preventDefault()
+  openMenu()
+}
+onMounted(() => window.addEventListener('keydown', onMenuKey))
+onUnmounted(() => window.removeEventListener('keydown', onMenuKey))
 </script>
 
 <template>
