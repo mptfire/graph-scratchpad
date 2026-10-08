@@ -11,6 +11,7 @@ import { trackInstall } from './lib/install'
 import { startCategories } from './state/categories'
 import { trackTheme } from './lib/theme'
 import { startVimJumps } from './lib/vimJumps'
+import { startShortcuts } from './lib/shortcuts'
 
 trackTheme()
 startDb()
@@ -18,6 +19,7 @@ startSyncTriggers()
 trackInstall()
 startCategories()
 startVimJumps()
+startShortcuts()
 trackKeyboard()
 void persistOnFirstRun()
 

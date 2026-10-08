@@ -877,6 +877,14 @@ a {
   min-height: 48px;
 }
 
+/* Search: the result Enter opens. */
+.list-main.hl {
+  margin-inline: -8px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  background: var(--wash);
+}
+
 .list-text {
   flex: 1;
   min-width: 0;
