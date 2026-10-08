@@ -20,8 +20,11 @@ export interface EditorHandle {
 const editors = new Map<string, EditorHandle>()
 let pending: { key: string; at?: CaretTarget } | null = null
 
-/** The key of the editor that has focus, or null. Drives the keyboard toolbar. */
-export const editing = reactive({ key: null as string | null })
+/**
+ * key: the editor that has focus, or null. Drives the keyboard toolbar.
+ * last: the one that had it last on this page (Vim's j and k bring it back).
+ */
+export const editing = reactive({ key: null as string | null, last: null as string | null })
 let blurTimer: ReturnType<typeof setTimeout> | undefined
 
 export function registerEditor(key: string, h: EditorHandle): void {
@@ -55,6 +58,7 @@ export function focusEditor(key: string, at?: CaretTarget): void {
 export function noteFocus(key: string): void {
   clearTimeout(blurTimer)
   editing.key = key
+  editing.last = key
 }
 
 export function noteBlur(key: string): void {
