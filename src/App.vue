@@ -6,6 +6,7 @@ import BottomNav from './components/BottomNav.vue'
 import NodePicker from './components/NodePicker.vue'
 import ActionSheet from './components/ActionSheet.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import KeysHelp from './components/KeysHelp.vue'
 import Toasts from './components/Toasts.vue'
 import { dbState, syncState } from './db/api'
 import { router } from './router'
@@ -89,6 +90,7 @@ watch(
     <NodePicker />
     <ActionSheet />
     <ConfirmDialog />
+    <KeysHelp />
     <Toasts />
   </div>
 </template>

@@ -30,6 +30,7 @@ import { ApiError } from '@/db/api'
 import { tokenRe } from '@/lib/tokens'
 import { cellRange, escapeCaret, normalCaret, vimKey, type VimRowAction } from '@/lib/vim'
 import { vim } from '@/state/vim'
+import { isMenuKey } from '@/lib/shortcuts'
 
 const props = withDefaults(
   defineProps<{
@@ -423,6 +424,12 @@ function onKeydown(e: KeyboardEvent) {
   if (e.isComposing || e.keyCode === 229) return
   if (vim.enabled && onVimKey(e)) return
   const mod = e.ctrlKey || e.metaKey
+  // Shift-Ctrl-K (⇧⌘K): the line's ⋯ menu.
+  if (isMenuKey(e)) {
+    e.preventDefault()
+    emit('shortcut', 'menu')
+    return
+  }
   switch (e.key) {
     case 'Enter':
       e.preventDefault()
