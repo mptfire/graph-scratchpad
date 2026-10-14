@@ -211,6 +211,8 @@ function onKey(e: KeyboardEvent) {
   const total = results.value.length + creates.value.length
   if (by) {
     e.preventDefault()
+    // Arrow keys mean a keyboard (on a phone, too): from here on the box keeps the cursor.
+    keys.value = true
     highlight.value = Math.max(0, Math.min(total - 1, highlight.value + by))
     scrollToPicked()
   } else if (e.key === 'Enter') {
