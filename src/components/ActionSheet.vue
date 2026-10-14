@@ -5,14 +5,11 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import { closeSheet, sheetState, type SheetAction } from '@/state/ui'
-import { isMenuKey } from '@/lib/shortcuts'
+import { isMenuKey, usedKeyboard } from '@/lib/shortcuts'
 
 /** The action Enter chooses; -1 for none (opened with a tap, until an arrow key). */
 const hl = ref(-1)
 const sheet = ref<HTMLElement>()
-// Whether the last thing used was the keyboard: then the menu opens with its first action picked.
-let keyed = false
-const onPointer = () => (keyed = false)
 
 function run(a: SheetAction) {
   closeSheet()
@@ -27,7 +24,6 @@ function move(by: number) {
 }
 
 function onKey(e: KeyboardEvent) {
-  keyed = true
   const s = sheetState.value
   if (!s || e.isComposing) return
   const ctrl = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
@@ -44,18 +40,13 @@ function onKey(e: KeyboardEvent) {
   e.stopPropagation()
 }
 
+// Opened from the keyboard: its first action picked.
 watch(sheetState, (s) => {
-  hl.value = s && keyed ? 0 : -1
+  hl.value = s && usedKeyboard() ? 0 : -1
 })
 
-onMounted(() => {
-  window.addEventListener('keydown', onKey, true)
-  window.addEventListener('pointerdown', onPointer, true)
-})
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKey, true)
-  window.removeEventListener('pointerdown', onPointer, true)
-})
+onMounted(() => window.addEventListener('keydown', onKey, true))
+onUnmounted(() => window.removeEventListener('keydown', onKey, true))
 </script>
 
 <template>
