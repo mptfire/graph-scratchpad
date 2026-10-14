@@ -34,7 +34,26 @@ export function isMenuKey(e: KeyboardEvent): boolean {
   return (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k'
 }
 
+let keyboardLast = false
+const fine = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches
+
+/** The last thing used was the keyboard, not a tap or a click: menus and pickers open ready for keys. */
+export function usedKeyboard(): boolean {
+  return keyboardLast
+}
+
+/**
+ * A picker or menu should start ready for keys (its box focused, its first
+ * choice picked): opened from the keyboard, or on a computer. On a phone,
+ * opened with a tap, the on-screen keyboard stays down and the list in view.
+ */
+export function readyForKeys(): boolean {
+  return keyboardLast || fine
+}
+
 export function startShortcuts(): void {
+  window.addEventListener('keydown', () => (keyboardLast = true), true)
+  window.addEventListener('pointerdown', () => (keyboardLast = false), true)
   window.addEventListener('keydown', (e) => {
     if (e.isComposing) return
     // ?, when it wouldn't type: no line being edited, or one in Vim's normal mode.

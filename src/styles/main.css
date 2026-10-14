@@ -1277,6 +1277,12 @@ a {
   min-width: 0;
 }
 
+/* Picked from the keyboard: Enter moves it here. */
+.picker-here.hl {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .picker-here-label {
   overflow: hidden;
   white-space: nowrap;

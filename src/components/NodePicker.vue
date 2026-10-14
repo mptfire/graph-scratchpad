@@ -3,6 +3,11 @@
 // send modes: browse like folders (tapping a row opens it; search results
 // open too) and confirm with "Move into …" / "Send to …", so nothing happens
 // by surprise.
+//
+// From the keyboard: ↑ ↓ (or Ctrl-N Ctrl-P) go through whatever could be
+// tapped, Enter does what the tap would, Esc cancels. Browsing, → (or Tab)
+// opens the picked list and ← (or Backspace in the empty box) goes back up,
+// so typing a name, Enter, Enter moves a line there.
 
 import { computed, nextTick, ref, watch } from 'vue'
 import Icon from './Icon.vue'
@@ -11,12 +16,16 @@ import { api } from '@/db/api'
 import type { BrowseRow, Crumb, Kind, SearchResult } from '@/db/types'
 import { closePicker, pickerState, reportError, type PickResult } from '@/state/ui'
 import { resultContext } from '@/lib/kinds'
+import { readyForKeys } from '@/lib/shortcuts'
 import { categoryById } from '@/state/categories'
 
 const q = ref('')
 const results = ref<SearchResult[]>([])
 const highlight = ref(0)
 const input = ref<HTMLInputElement>()
+const root = ref<HTMLElement>()
+/** Ready for keys: the box has focus and a choice is picked (opened from the keyboard, or on a computer). */
+const keys = ref(false)
 let seq = 0
 
 // Move-mode browsing: the trail of nodes opened so far (empty = all pads).
@@ -32,6 +41,15 @@ const isSend = computed(() => req.value?.mode === 'send')
 const browsing = computed(() => isMove.value && !trimmed.value)
 const excluded = computed(() => new Set(req.value?.excludeIds ?? []))
 const here = computed(() => trail.value.at(-1) ?? null)
+
+/** What ↑ ↓ go through while browsing: "Move into …" (inside a list), then the lists here, not the one being moved. */
+type Target = { kind: 'here' } | { kind: 'row'; row: BrowseRow }
+const targets = computed<Target[]>(() => [
+  ...(here.value ? [{ kind: 'here' as const }] : []),
+  ...rows.value.filter((r) => !excluded.value.has(r.id)).map((row) => ({ kind: 'row' as const, row })),
+])
+const browseHl = ref(0)
+const picked = computed(() => (keys.value ? targets.value[browseHl.value] : undefined))
 
 const CREATE_LABELS: Partial<Record<Kind, (t: string) => string>> = {
   place: (t) => `New place “${t}”`,
@@ -62,7 +80,9 @@ watch(req, async (r) => {
   highlight.value = 0
   trail.value = []
   rows.value = []
+  keys.value = readyForKeys()
   if (r.mode === 'move' || r.mode === 'send') {
+    if (keys.value) void nextTick(() => input.value?.focus())
     // Start next to the node being moved: its siblings are the likeliest targets.
     if (r.startNear) {
       try {
@@ -88,7 +108,10 @@ async function browse() {
   browseLoading.value = true
   try {
     const r = await api.listBrowse(here.value?.id ?? null)
-    if (my === browseSeq) rows.value = r
+    if (my === browseSeq) {
+      rows.value = r
+      browseHl.value = 0
+    }
   } catch (e) {
     reportError(e)
   } finally {
@@ -116,7 +139,8 @@ async function openResult(r: SearchResult) {
     return
   }
   q.value = ''
-  input.value?.blur()
+  // On a phone, put the keyboard away to show the list; with keys, keep typing.
+  if (!keys.value) input.value?.blur()
   void browse()
 }
 
@@ -170,30 +194,59 @@ function cancel() {
   r?.onCancel?.()
 }
 
+function scrollToPicked() {
+  void nextTick(() => root.value?.querySelector('.picker-results .hl, .picker-here.hl')?.scrollIntoView({ block: 'nearest' }))
+}
+
 function onKey(e: KeyboardEvent) {
+  if (e.isComposing) return
+  const ctrl = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+  const k = e.key.toLowerCase()
+  const by = e.key === 'ArrowDown' || (ctrl && k === 'n') ? 1 : e.key === 'ArrowUp' || (ctrl && k === 'p') ? -1 : 0
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    return cancel()
+  }
+  if (browsing.value) return onBrowseKey(e, by)
   const total = results.value.length + creates.value.length
-  if (e.key === 'ArrowDown') {
+  if (by) {
     e.preventDefault()
-    highlight.value = Math.min(total - 1, highlight.value + 1)
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    highlight.value = Math.max(0, highlight.value - 1)
+    highlight.value = Math.max(0, Math.min(total - 1, highlight.value + by))
+    scrollToPicked()
   } else if (e.key === 'Enter') {
     e.preventDefault()
-    if (browsing.value) return moveHere()
     const i = highlight.value
     if (i < results.value.length) pick(results.value[i])
     else if (creates.value[i - results.value.length]) create(creates.value[i - results.value.length])
-  } else if (e.key === 'Escape') {
+  }
+}
+
+function onBrowseKey(e: KeyboardEvent, by: number) {
+  const t = picked.value
+  if (by) {
     e.preventDefault()
-    cancel()
+    // The first press, on a phone, shows the pick where it is.
+    if (keys.value) browseHl.value = Math.max(0, Math.min(targets.value.length - 1, browseHl.value + by))
+    keys.value = true
+    scrollToPicked()
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (t?.kind === 'row') open(t.row)
+    else moveHere()
+  } else if ((e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) && t?.kind === 'row') {
+    e.preventDefault()
+    open(t.row)
+  } else if (e.key === 'ArrowLeft' || e.key === 'Backspace' || (e.key === 'Tab' && e.shiftKey)) {
+    // Back up a level (the box is empty while browsing, so these have nothing else to do).
+    e.preventDefault()
+    if (trail.value.length) goTo(trail.value.length - 2)
   }
 }
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="req" class="picker" role="dialog" :aria-label="req.title">
+    <div v-if="req" ref="root" class="picker" role="dialog" :aria-label="req.title" @keydown="onKey">
       <div class="picker-head">
         <span class="picker-title">{{ req.title }}</span>
         <button type="button" class="icon-btn" aria-label="Cancel" @mousedown.prevent @click="cancel">
@@ -210,20 +263,26 @@ function onKey(e: KeyboardEvent) {
         autocapitalize="off"
         spellcheck="false"
         :placeholder="req.placeholder ?? 'Search'"
-        @keydown="onKey"
       />
 
       <template v-if="browsing">
         <nav class="picker-trail" aria-label="Location">
-          <button type="button" :class="{ on: !trail.length }" @click="goTo(-1)">All pads</button>
+          <button type="button" :class="{ on: !trail.length }" @mousedown.prevent @click="goTo(-1)">All pads</button>
           <template v-for="(c, i) in trail" :key="c.id">
             <span class="sep">›</span>
-            <button type="button" :class="{ on: i === trail.length - 1 }" @click="goTo(i)">
+            <button type="button" :class="{ on: i === trail.length - 1 }" @mousedown.prevent @click="goTo(i)">
               {{ c.label || 'Untitled' }}
             </button>
           </template>
         </nav>
-        <button v-if="here" type="button" class="btn btn-primary picker-here" @click="moveHere">
+        <button
+          v-if="here"
+          type="button"
+          class="btn btn-primary picker-here"
+          :class="{ hl: picked?.kind === 'here' }"
+          @mousedown.prevent
+          @click="moveHere"
+        >
           <Icon :name="isSend ? 'share' : 'move'" :size="18" />
           <span class="picker-here-label">{{ isSend ? 'Send to' : 'Move into' }} “{{ here.label || 'Untitled' }}”</span>
         </button>
@@ -232,8 +291,9 @@ function onKey(e: KeyboardEvent) {
             <button
               type="button"
               class="picker-item"
-              :class="{ done: r.done, excluded: excluded.has(r.id) }"
+              :class="{ done: r.done, excluded: excluded.has(r.id), hl: picked?.kind === 'row' && picked.row.id === r.id }"
               :disabled="excluded.has(r.id)"
+              @mousedown.prevent
               @click="open(r)"
             >
               <KindIcon :kind="r.kind" />

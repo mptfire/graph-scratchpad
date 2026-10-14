@@ -4,7 +4,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launch, watchConsole, shot, activeRowText, assert, BASE, sleep } from './lib.mjs'
+import { launch, watchConsole, shot, outline, activeRowText, assert, BASE, sleep } from './lib.mjs'
 
 const { ctx, close } = await launch({ userDataDir: mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'gs-keys-')) })
 const page = ctx.pages()[0] ?? (await ctx.newPage())
@@ -159,6 +159,47 @@ assert(await page.isVisible('.keys-help >> text=Stop editing'), 'Esc to stop edi
 await shot(page, 'keys-help')
 await keys('Escape')
 assert(!(await helpOpen()), 'Esc closes them')
+
+// Move to…, all from the keyboard: the box has the cursor, ↑ ↓ Ctrl-N Ctrl-P pick, → opens a
+// list, ← goes back up, and typing a name then Enter, Enter moves the line there.
+const pickerPicked = () =>
+  page.evaluate(() => {
+    const el = document.querySelector('.picker .picker-here.hl, .picker .picker-results .hl')
+    return el ? (el.classList.contains('picker-here') ? 'here' : el.querySelector('.picker-label')?.textContent?.trim()) : null
+  })
+const trailNow = () => page.$$eval('.picker-trail button', (bs) => bs.map((b) => b.textContent.trim()).join(' › '))
+await page.tap('.row:has-text("plain line") .row-text')
+await sleep(200)
+await keys('Control+Shift+K', 'ArrowDown')
+assert((await picked()) === 'Move to…', 'the menu, on Move to…')
+await keys('Enter')
+await page.waitForSelector('.picker-here')
+await sleep(300)
+assert(await page.evaluate(() => document.activeElement?.classList.contains('picker-input')), 'Move to… opens with the cursor in its box')
+assert((await pickerPicked()) === 'here', 'picked: "Move into" where the line is now')
+await keys('Control+n')
+assert((await pickerPicked()) === 'Zebra crossing', 'Ctrl-N: the first list here (not the line being moved)')
+await keys('ArrowDown', 'Control+p')
+assert((await pickerPicked()) === 'Zebra crossing', '↓ then Ctrl-P: back')
+await keys('ArrowRight')
+await page.waitForFunction(() => document.querySelector('.picker-here')?.textContent.includes('Zebra crossing'))
+assert((await trailNow()).endsWith('Keys › Zebra crossing'), '→ opens it: ' + (await trailNow()))
+assert((await pickerPicked()) === 'here', 'with "Move into" picked')
+await keys('ArrowLeft')
+await page.waitForFunction(() => document.querySelector('.picker-here')?.textContent.includes('Keys'))
+assert((await trailNow()).endsWith('Keys'), '← goes back up: ' + (await trailNow()))
+await page.keyboard.type('mussel')
+await page.waitForSelector('.picker-results .hl:has-text("Zebra mussel")')
+await shot(page, 'keys-move-search')
+await keys('Enter')
+await page.waitForFunction(() => document.querySelector('.picker-here')?.textContent.includes('Zebra mussel'))
+assert(await page.evaluate(() => document.activeElement?.classList.contains('picker-input')), 'Enter on a result opens it, the cursor still in the box')
+assert((await pickerPicked()) === 'here', 'with "Move into “Zebra mussel”" picked')
+await keys('Enter')
+await page.waitForSelector('.picker', { state: 'detached' })
+await sleep(500)
+const moved = await outline(page)
+assert(moved.indexOf('  plain line') === moved.indexOf('Zebra mussel') + 1, 'and Enter moves the line into it: ' + JSON.stringify(moved))
 
 // With Vim keys: a page you arrive on has a cursor, on the line you were last on there.
 await page.goto(BASE + '/#/settings')

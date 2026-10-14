@@ -18,12 +18,13 @@ const groups: { title: string; rows: { keys: string[][]; what: string; plain?: b
     ],
   },
   {
-    title: 'In Search and menus',
+    title: 'In Search, menus, Move to… and Send to…',
     rows: [
       { keys: [['↑'], ['↓']], what: 'Pick' },
       { keys: [['Ctrl', 'P'], ['Ctrl', 'N']], what: 'Pick, as in Vim’s menus' },
       { keys: [['Enter']], what: 'Open it, or do it' },
-      { keys: [['Esc']], what: 'Go back, or close the menu' },
+      { keys: [['→'], ['←']], what: 'Moving or sending: look inside a list, or go back up' },
+      { keys: [['Esc']], what: 'Go back, or close' },
     ],
   },
   {
