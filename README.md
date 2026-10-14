@@ -52,9 +52,9 @@ Settings for `server/serve.mjs`:
 To keep it running:
 
 - `npm run deploy` builds, tests, and publishes a release on this machine (`~/.local/share/graph-scratchpad`), for the systemd user unit in `deploy/graph-scratchpad.service`.
-- `npm run deploy:remote` publishes one to another machine over ssh. Set `DEPLOY_HOST` (and optionally `DEPLOY_REMOTE_ROOT`) in a `.env.deploy` file, which is gitignored. On NixOS, `deploy/nixos/graph-scratchpad.nix` is a module that runs it as a hardened system service with nixpkgs' Node and can publish it with `tailscale serve`.
+- `npm run deploy:remote` publishes one to another machine over ssh. Set `DEPLOY_HOST` (and optionally `DEPLOY_REMOTE_ROOT`) in a `.env.deploy` file, which is gitignored. On NixOS, `deploy/nixos/graph-scratchpad.nix` is a module that runs it as a hardened system service with nixpkgs' Node and can publish it with `tailscale serve`. If the host can't be reached over ssh within 10 seconds, it says so and stops, rather than waiting.
 - `npm run deploy:vercel` deploys the static build to the Vercel project this clone is linked to (`npx vercel link` once). It tries a second time if the first fails: the Vercel CLI can fail with "Not authorized" on the run that renews its expired login.
-- `npm run deploy:all` builds and tests once, then does all three: this machine, the `DEPLOY_HOST`, and Vercel, so they never serve different versions.
+- `npm run deploy:all` builds and tests once, then does all three: this machine, Vercel, and the `DEPLOY_HOST` last, so they never serve different versions and a host that's down only holds up itself.
 
 A release is the built app (with `.gz` siblings) plus the server, copied to `releases/<timestamp>/` with `current` repointed atomically. New static files are live on the next request, and the server restarts only when its own code changed. An installed app shows "A new version is ready" and reloads when you tap it.
 
