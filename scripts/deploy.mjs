@@ -64,7 +64,15 @@ for (const f of SERVER_FILES) await fs.copyFile(join(repo, 'server', f), join(st
 if (toRemote) {
   const host = remoteHost
   const root = process.env.DEPLOY_REMOTE_ROOT ?? '/var/lib/graph-scratchpad'
-  run('rsync', ['-a', '--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r', `${stage}/`, `${host}:${root}/releases/${name}/`], {
+  // A host that's down (or off the tailnet) fails in seconds instead of hanging.
+  const SSH = ['-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=3']
+  try {
+    run('ssh', [...SSH, host, 'true'])
+  } catch {
+    console.error(`Couldn't reach ${host} over ssh within 10 seconds, so nothing was deployed there. Is it up and reachable (for a tailnet: tailscale ping ${host})?`)
+    process.exit(1)
+  }
+  run('rsync', ['-a', '-e', `ssh ${SSH.join(' ')}`, '--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r', `${stage}/`, `${host}:${root}/releases/${name}/`], {
     stdio: 'inherit',
   })
   const script = `
@@ -78,7 +86,7 @@ if (toRemote) {
     systemctl is-active --quiet ${SERVICE} || changed=1
     if [ "$changed" = 1 ]; then sudo systemctl restart ${SERVICE} && echo "restarted ${SERVICE}"; fi
   `
-  process.stdout.write(run('ssh', [host, script]))
+  process.stdout.write(run('ssh', [...SSH, host, script]))
   console.log(`Deployed ${name} -> ${host}:${root}/current`)
 } else {
   const root = process.env.DEPLOY_ROOT ?? join(homedir(), '.local/share/graph-scratchpad')
