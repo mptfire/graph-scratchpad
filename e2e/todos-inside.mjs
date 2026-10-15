@@ -77,7 +77,8 @@ await sleep(300)
 assert(same(await listed(), ['Plumbing: Buy elbows', 'Plumbing › Shower: Seal the drain', 'Tile: Order grout', 'Bathroom: Call the inspector']),
   'every open to-do, folded ones too, under where it sits: ' + JSON.stringify(await listed()))
 assert((await sub()) === '4 open · 1 done', 'with how many: ' + (await sub()))
-assert((await page.innerText('.back-label')) === 'Bathroom', 'back to the page')
+const heading = async () => (await page.innerText('h1.page-title')).replace(/​/g, '').trim()
+assert((await heading()) === 'To-dos inside Bathroom', 'titled with the page’s name: ' + (await heading()))
 await shot(page, 'todos-inside')
 
 // Show done, and hide it again.
@@ -133,6 +134,8 @@ await page.tap('.sheet-action:has-text("To-dos inside")')
 await page.waitForSelector('.todo')
 await sleep(300)
 assert(same(await listed(), ['Plumbing: Buy elbows', 'Shower: Seal the drain']), 'a line’s own to-dos: ' + JSON.stringify(await listed()))
+assert((await heading()) === 'To-dos inside Plumbing', 'titled with the line: ' + (await heading()))
+assert((await page.innerText('.back-label')) === 'Back', 'and Back goes back where you were')
 await keys('Escape')
 await page.waitForFunction((p) => location.hash === p, pad)
 assert(true, 'Esc goes back')

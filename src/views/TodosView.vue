@@ -129,13 +129,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     <header class="topbar">
       <a class="back" href="#" @click.prevent="back">
         <Icon name="chevron-left" />
-        <span class="back-label">{{ data ? label(data.tree) : 'Back' }}</span>
+        <span class="back-label">Back</span>
       </a>
     </header>
 
     <p v-if="error && !data" class="empty-state">This item doesn’t exist. It may have been deleted for good.</p>
     <template v-else-if="data">
-      <h1 class="page-title standalone">To-dos inside</h1>
+      <h1 class="page-title standalone">To-dos inside <TextView :text="data.tree.text" /></h1>
       <p class="todos-sub">
         <template v-if="all.length">{{ openCount }} open · {{ doneCount }} done</template>
         <template v-else>No to-dos inside “{{ label(data.tree) }}” yet.</template>
