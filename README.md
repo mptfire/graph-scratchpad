@@ -56,7 +56,9 @@ To keep it running:
 - `npm run deploy:vercel` deploys the static build to the Vercel project this clone is linked to (`npx vercel link` once). It tries a second time if the first fails: the Vercel CLI can fail with "Not authorized" on the run that renews its expired login.
 - `npm run deploy:all` builds and tests once, then does all three: this machine, Vercel, and the `DEPLOY_HOST` last, so they never serve different versions and a host that's down only holds up itself.
 
-A release is the built app (with `.gz` siblings) plus the server, copied to `releases/<timestamp>/` with `current` repointed atomically. New static files are live on the next request, and the server restarts only when its own code changed. An installed app shows "A new version is ready" and reloads when you tap it.
+Versions follow [semantic versioning](https://semver.org), and [`CHANGELOG.md`](CHANGELOG.md) says what changed in each (the app shows it too: Settings → About → What's new, and after an update a note says "Updated to 1.1.0"). Changes go under `## [Unreleased]` as they're made; `npm run release -- patch | minor | major` turns them into the next version, bumps `package.json`, commits and tags it. `deploy:all` won't deploy unreleased changes.
+
+A deploy is the built app (with `.gz` siblings) plus the server, copied to `releases/<timestamp>/` with `current` repointed atomically. New static files are live on the next request, and the server restarts only when its own code changed. An installed app shows "A new version is ready" and reloads when you tap it.
 
 ## Development
 

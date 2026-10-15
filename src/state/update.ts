@@ -4,6 +4,20 @@
 // half hour while it's open, and when asked (Settings → About).
 
 import type { Ref } from 'vue'
+import { prefs } from './prefs'
+import { toast } from './ui'
+
+/**
+ * After an update, say so once, with a way to see what's new. The version
+ * this device last opened is kept; on the first run there's nothing to say.
+ */
+export function noteNewVersion(showChanges: () => void): void {
+  const now = __APP_VERSION__
+  const before = prefs.lastVersion
+  if (before === now) return
+  prefs.lastVersion = now
+  if (before) toast(`Updated to ${now}`, { action: { label: 'What’s new', run: showChanges }, ms: 12_000 })
+}
 
 let reg: ServiceWorkerRegistration | undefined
 let ready: Ref<boolean> | undefined

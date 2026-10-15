@@ -55,6 +55,13 @@ export const prefs = {
   set showDoneTodos(v: boolean) {
     write('gs.showDoneTodos', v ? '1' : null)
   },
+  /** The version this device last opened ("Updated to …" after an update). */
+  get lastVersion(): string | null {
+    return read('gs.lastVersion')
+  },
+  set lastVersion(v: string | null) {
+    write('gs.lastVersion', v)
+  },
   /** Light or dark on this device; null follows the system. (index.html reads it too, before the first paint.) */
   get theme(): 'light' | 'dark' | null {
     const v = read('gs.theme')

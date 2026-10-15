@@ -363,6 +363,7 @@ async function askPersist() {
             <dt>Version</dt>
             <dd>
               {{ version }}, built {{ buildTime }}
+              <RouterLink to="/changes" class="link-btn whats-new">What’s new</RouterLink>
               <button type="button" class="link-btn check-update" :disabled="checking" @click="checkUpdates">
                 {{ checking ? 'Checking…' : 'Check for updates' }}
               </button>
