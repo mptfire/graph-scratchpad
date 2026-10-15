@@ -56,12 +56,12 @@ export function vimOpen(path: string): void {
   void router.push(path)
 }
 
-/** Back to the page before, on the line you were on (Esc from Search). */
-export function goBack(): void {
+/** Back to the page before, on the line you were on (Esc from Search, To-dos inside); with none before, to `fallback`. */
+export function goBack(fallback = '/'): void {
   const state = window.history.state as { back?: string | null } | null
   jumping = true
   if (state?.back) router.back()
-  else void router.push('/')
+  else void router.push(fallback)
 }
 
 function jump(dir: 'back' | 'forward') {

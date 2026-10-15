@@ -22,12 +22,13 @@ import { useLoader } from '@/composables/useLoader'
 import { mergeRefs, refCache } from '@/state/refs'
 import { labelize } from '@/lib/tokens'
 import { KIND_NAMES } from '@/lib/kinds'
-import { laneHint, subtreeIds } from '@/lib/treeOps'
+import { laneHint, linesAbove, subtreeIds } from '@/lib/treeOps'
+import { todoCounts, todosLabel } from '@/lib/todos'
 import { editing, focusEditor } from '@/state/focus'
 import { prefs } from '@/state/prefs'
 import { openLinkPicker } from '@/lib/linking'
 import type { VimRowAction } from '@/lib/vim'
-import { vimInsert } from '@/state/vim'
+import { vim, vimInsert } from '@/state/vim'
 import { vimOpen } from '@/lib/vimJumps'
 import { inTextField, isMenuKey, overlayOpen } from '@/lib/shortcuts'
 import { openUrl } from '@/lib/urls'
@@ -302,6 +303,9 @@ function openMenu() {
   if (!node.value) return
   if (isRelation.value) return openRelationMenu()
   const actions: SheetAction[] = [{ label: 'Show graph', icon: 'graph', run: () => router.push(`/n/${props.id}/graph`) }]
+  // Every to-do on the page, however deep, in one list.
+  const todos = data.value?.tree ? todoCounts(data.value.tree) : null
+  if (todos?.inside) actions.push({ label: todosLabel(todos), icon: 'checkbox', run: () => router.push(`/n/${props.id}/todos`) })
   // Two or more numbered lists side by side: swimlanes (laneHint).
   if (laneHint(data.value?.tree)) {
     actions.push({ label: 'Show as lanes', icon: 'list', run: () => router.push(`/n/${props.id}/graph?lanes=1`) })
@@ -365,6 +369,18 @@ onMounted(async () => {
   await nextTick()
   editTitle()
   void router.replace({ query: {} })
+})
+
+// Sent to a line (from "To-dos inside"): open the folded lines above it, and put the cursor on it.
+watch(data, (d) => {
+  const id = route.query.focus
+  if (!d || typeof id !== 'string' || id === 'title') return
+  void router.replace({ query: {} })
+  const above = linesAbove(d.tree, id)
+  if (!above) return
+  for (const line of above) if (line.collapsed) api.setCollapsed(line.id, false).catch(reportError)
+  if (vim.enabled) vim.mode = 'normal'
+  focusEditor(`row:${id}`, 'start')
 })
 
 // Shift-Ctrl-K (⇧⌘K) with no line being edited: the page's menu. (A line's own goes through onShortcut.)

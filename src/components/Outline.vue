@@ -12,6 +12,7 @@ import Icon from './Icon.vue'
 import { api } from '@/db/api'
 import type { TreeNode } from '@/db/types'
 import * as T from '@/lib/treeOps'
+import { todoCounts, todosLabel } from '@/lib/todos'
 import type { CaretTarget, LineMarker, PastedLine, PastedRest, Shortcut } from '@/lib/editorDom'
 import { openLinkPicker } from '@/lib/linking'
 import { editing, focusEditor, getEditor } from '@/state/focus'
@@ -600,9 +601,12 @@ function current(n: TreeNode): TreeNode {
 
 function openMore(row: T.FlatRow) {
   const n = row.node
+  // Every to-do inside the line, however deep, in one list.
+  const todos = todoCounts(n)
   const actions: SheetAction[] = [
     { label: 'Open', icon: 'open', run: () => router.push(`/n/${n.id}`) },
     { label: 'Move to…', icon: 'move', run: () => moveTo(row) },
+    ...(todos.inside ? [{ label: todosLabel(todos), icon: 'checkbox', run: () => router.push(`/n/${n.id}/todos`) }] : []),
     // Out to other apps: the line, or the line and what's inside it as a markdown list.
     { label: 'Copy line', icon: 'copy', run: () => copyLine(current(n)) },
     ...(row.hasChildren

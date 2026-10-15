@@ -12,6 +12,7 @@ export const router = createRouter({
     { path: '/pads', component: PadsView },
     { path: '/n/:id', component: NodeView, props: true },
     { path: '/n/:id/graph', component: () => import('./views/GraphView.vue'), props: true },
+    { path: '/n/:id/todos', component: () => import('./views/TodosView.vue'), props: true },
     { path: '/c/:id', component: () => import('./views/CategoryView.vue'), props: true },
     { path: '/kinds', component: () => import('./views/ContextsView.vue') },
     // The Kinds tab was called Contexts.
