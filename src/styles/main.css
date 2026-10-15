@@ -966,6 +966,66 @@ a {
   margin-top: 16px;
 }
 
+/* ------------------------------------------------------------ to-dos inside */
+
+/* Every to-do in a line and everything inside it, under where each sits. */
+.todos-sub {
+  margin: -4px 0 8px;
+  color: var(--ink-soft);
+}
+
+.todo-where {
+  margin: 18px 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.todo {
+  display: flex;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--rule);
+}
+
+.todo .check {
+  height: 44px;
+  margin-left: -6px;
+}
+
+.todo-text {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 4px 10px 0;
+  font-size: 17px;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.todo.done .todo-text {
+  color: var(--pencil);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--pencil);
+}
+
+/* Picked from the keyboard. */
+.todo.hl {
+  margin-inline: -8px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  background: var(--wash);
+}
+
+.todos-done {
+  margin-top: 12px;
+}
+
 /* ------------------------------------------------------------ backlinks */
 
 .backlink-list {

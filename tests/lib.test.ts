@@ -6,6 +6,7 @@ import { linkContexts } from '../src/lib/relations'
 import { linkedIds, lineCount, toHtml, toMarkdown } from '../src/lib/markdownOut'
 import { findUrls, urlAt } from '../src/lib/urls'
 import { laneHint } from '../src/lib/treeOps'
+import { todoCounts, todosIn } from '../src/lib/todos'
 import type { TreeNode } from '../src/db/types'
 
 const A = '11111111-1111-4111-8111-111111111111'
@@ -291,5 +292,65 @@ describe('when to offer lanes', () => {
     // A numbered bullet with nothing under it doesn't count.
     expect(laneHint(n({ kind: 'pad' }, [n({ numbered: true }, [step()]), n({ numbered: true })]))).toBe(false)
     expect(laneHint(null)).toBe(false)
+  })
+})
+
+describe('to-dos inside a line', () => {
+  let n = 0
+  const line = (text: string, o: Partial<TreeNode> = {}, children: TreeNode[] = []): TreeNode => ({
+    id: `t-${++n}`,
+    kind: 'item',
+    text,
+    done: false,
+    collapsed: false,
+    numbered: false,
+    task: false,
+    links: 0,
+    category: null,
+    ref: null,
+    children,
+    ...o,
+  })
+  const todo = (text: string, o: Partial<TreeNode> = {}, children: TreeNode[] = []) => line(text, { task: true, ...o }, children)
+
+  it('lists every to-do inside, however deep and folded, in reading order, with where it sits', () => {
+    const pad = line('Bathroom', { kind: 'pad' }, [
+      line('Plumbing', { collapsed: true }, [
+        todo('Buy elbows'),
+        line('Shower', {}, [todo('Pick a valve', { done: true }), line('a note')]),
+      ]),
+      todo('Order grout'),
+    ])
+    const list = todosIn(pad, (x) => x.text)
+    expect(list.map((t) => [t.text, t.done, t.path.join(' › ')])).toEqual([
+      ['Buy elbows', false, 'Plumbing'],
+      ['Pick a valve', true, 'Plumbing › Shower'],
+      ['Order grout', false, ''],
+    ])
+    expect(list[1].pathIds).toEqual([pad.children[0].id, pad.children[0].children[1].id])
+    expect(todoCounts(pad)).toEqual({ inside: 3, open: 2 })
+  })
+
+  it('counts a line that is only a link as the to-do it links to, once', () => {
+    const elsewhere = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+    const today = line('Today', { kind: 'pad' }, [
+      todo(`[[${elsewhere}]]`, { ref: elsewhere }),
+      line('Errands', {}, [todo(`[[${elsewhere}]]`, { ref: elsewhere }), todo('Post office')]),
+    ])
+    const list = todosIn(today, (x) => x.text)
+    expect(list.map((t) => t.text)).toEqual([`[[${elsewhere}]]`, 'Post office'])
+    // Checking it off checks off the item it links to; going to it shows the first such line.
+    expect(list[0].id).toBe(elsewhere)
+    expect(list[0].lineId).toBe(today.children[0].id)
+  })
+
+  it('includes the line itself when it is a to-do, but the menu counts only what is inside', () => {
+    const job = todo('Fix the sprinkler', {}, [todo('Buy a head'), line('note')])
+    expect(todosIn(job, (x) => x.text).map((t) => [t.text, t.path.length])).toEqual([
+      ['Fix the sprinkler', 0],
+      ['Buy a head', 0],
+    ])
+    expect(todoCounts(job)).toEqual({ inside: 1, open: 2 })
+    expect(todoCounts(todo('Alone'))).toEqual({ inside: 0, open: 1 })
   })
 })

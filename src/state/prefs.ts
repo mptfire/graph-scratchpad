@@ -48,6 +48,13 @@ export const prefs = {
   set showDoneBacklinks(v: boolean) {
     write('gs.showDoneBacklinks', v ? '1' : null)
   },
+  /** "To-dos inside" shows the finished ones too. */
+  get showDoneTodos(): boolean {
+    return read('gs.showDoneTodos') === '1'
+  },
+  set showDoneTodos(v: boolean) {
+    write('gs.showDoneTodos', v ? '1' : null)
+  },
   /** Light or dark on this device; null follows the system. (index.html reads it too, before the first paint.) */
   get theme(): 'light' | 'dark' | null {
     const v = read('gs.theme')

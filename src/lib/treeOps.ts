@@ -11,6 +11,16 @@ export interface Located {
   index: number
 }
 
+/** The lines between `root` and line `id` (the ones that fold it away), top first; null if it isn't under `root`. */
+export function linesAbove(root: TreeNode, id: string): TreeNode[] | null {
+  for (const c of root.children) {
+    if (c.id === id) return []
+    const below = linesAbove(c, id)
+    if (below) return [c, ...below]
+  }
+  return null
+}
+
 export function locate(root: TreeNode, id: string): Located | null {
   if (root.id === id) return { node: root, parent: null, index: 0 }
   const stack: TreeNode[] = [root]

@@ -41,6 +41,13 @@ const groups: { title: string; rows: { keys: string[][]; what: string; plain?: b
       { keys: [['Esc']], what: 'Stop editing', plain: true },
     ],
   },
+  {
+    title: 'In To-dos inside',
+    rows: [
+      { keys: [['Space'], [MOD, 'Enter']], what: 'Check off, or back' },
+      { keys: [['Enter']], what: 'Go to the line in its list' },
+    ],
+  },
 ]
 
 function close() {
