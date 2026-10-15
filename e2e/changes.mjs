@@ -1,15 +1,15 @@
 // Versions: Settings → About shows the version with What's new (the changelog,
 // built in); after an update, a note says so once, with What's new.
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { launch, watchConsole, shot, assert, BASE, sleep } from './lib.mjs'
 
-const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+// (Any build: the app's name and version are read off the page.)
 const { ctx, close } = await launch({ userDataDir: mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'gs-changes-')) })
 const page = ctx.pages()[0] ?? (await ctx.newPage())
 const errors = watchConsole(page)
-const updatedNote = () => page.isVisible(`.toast:has-text("Updated to ${version}")`)
+const updatedNote = () => page.isVisible('.toast:has-text("Updated to")')
 
 // The first run: nothing to say.
 await page.goto(BASE + '/')
@@ -20,11 +20,14 @@ assert(!(await updatedNote()), 'a first run says nothing about updates')
 // About: the version, and What's new.
 await page.goto(BASE + '/#/settings?tab=about')
 await page.waitForSelector('.whats-new')
-assert((await page.innerText('.facts')).includes(version), 'About shows the version: ' + version)
+const about = await page.innerText('.facts')
 await page.tap('.whats-new')
 await page.waitForSelector('.release')
 assert((await page.innerText('.page-title')).includes('What’s new'), 'What’s new opens')
-assert((await page.innerText('.changes-page')).includes(`You have Graph Paper ${version}`), 'saying which version you have')
+const have = /You have (.+) (\d+\.\d+\.\d+)\./.exec(await page.innerText('.changes-page'))
+assert(have, 'saying which version you have: ' + have?.[0])
+const version = have[2]
+assert(about.includes(version), 'the version About shows: ' + version)
 const first = (await page.innerText('.release-title')).trim()
 assert(first.startsWith(version), 'newest first, starting with this one: ' + first)
 assert((await page.$$('.release-items li')).length > 3, 'with what’s in it')
