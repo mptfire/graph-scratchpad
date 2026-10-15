@@ -2,10 +2,16 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync } from 'node:fs'
 
 // The app's name (the installed app, the page title, and where the app names
 // itself). A build of it under another name sets VITE_APP_NAME before this runs.
 const APP_NAME = (process.env.VITE_APP_NAME ??= 'Graph Paper')
+// Its version and what's new in it (Settings → About → What's new). A build
+// under another name can bring its own: APP_VERSION and APP_CHANGELOG (a path).
+const APP_VERSION =
+  process.env.APP_VERSION ?? (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version
+const CHANGELOG = readFileSync(process.env.APP_CHANGELOG ?? new URL('./CHANGELOG.md', import.meta.url), 'utf8')
 
 export default defineConfig({
   plugins: [
@@ -51,7 +57,8 @@ export default defineConfig({
   },
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __CHANGELOG__: JSON.stringify(CHANGELOG),
   },
   optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
   worker: { format: 'es' },

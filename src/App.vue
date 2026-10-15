@@ -12,8 +12,11 @@ import { dbState, syncState } from './db/api'
 import { router } from './router'
 import { APP_NAME } from './lib/appName'
 import { editing } from './state/focus'
-import { trackUpdates } from './state/update'
+import { noteNewVersion, trackUpdates } from './state/update'
 import { closePicker, closeSheet, confirmState, pickerState, toast } from './state/ui'
+
+// Just updated: "Updated to 1.1.0", with What's new.
+noteNewVersion(() => void router.push('/changes'))
 
 const { needRefresh, updateServiceWorker } = useRegisterSW({
   immediate: true,

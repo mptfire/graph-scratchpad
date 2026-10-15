@@ -22,6 +22,7 @@ export const router = createRouter({
     { path: '/people', redirect: `/c/${PEOPLE_ID}` },
     { path: '/search', component: () => import('./views/SearchView.vue') },
     { path: '/settings', component: () => import('./views/SettingsView.vue') },
+    { path: '/changes', component: () => import('./views/ChangesView.vue') },
     { path: '/trash', component: () => import('./views/TrashView.vue') },
     { path: '/relations', component: () => import('./views/RelationsView.vue') },
     { path: '/:rest(.*)*', redirect: '/' },

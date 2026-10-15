@@ -2164,9 +2164,45 @@ kbd {
 }
 
 /* Settings → About: "Check for updates", beside the version. */
-.check-update {
+.check-update,
+.whats-new {
   margin-left: 6px;
   font-size: 15px;
+}
+
+/* What's new: the changelog, a version at a time. */
+.release {
+  margin: 0 0 22px;
+}
+
+.release-title {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 750;
+}
+
+.release-date {
+  margin-left: 8px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  font-weight: 550;
+}
+
+.release-section {
+  margin: 12px 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.release-items {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.release-items li {
+  margin: 4px 0;
+  line-height: 1.45;
 }
 
 /* Lanes in the graph view: a band per lane, links between lanes as arrows;
