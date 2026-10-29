@@ -5,7 +5,7 @@ import { labelize, makeToken, parseTokens, soleLink } from '../lib/tokens'
 import { fuzzyScore } from '../lib/fuzzy'
 import { PHRASES_VERSION, linkContexts } from '../lib/relations'
 import { textHash } from '../lib/textHash'
-import { HLC_RE, Hlc, UNKNOWN_HLC, ZERO_HLC, hlcWall } from './hlc'
+import { formatHlc, HLC_RE, Hlc, UNKNOWN_HLC, ZERO_HLC, hlcWall } from './hlc'
 import {
   KINDS,
   NO_RELATION_ID,
@@ -197,6 +197,11 @@ export class Store {
     // The sync triggers stamp every change with this (see migration 5).
     db.createFunction('hlc_now', () => this.#hlc.tick())
     migrate(db)
+    // Clocks recorded by older builds could be malformed or implausibly far in
+    // the future (the server now rejects writes like that; see sync-server.mjs).
+    // Either way such a row loses every comparison against honest clocks
+    // forever, so restamp it (local flag kept: pending edits still push).
+    this.#repairSyncClocks()
     // Never hand out a time earlier than one already recorded (the device's clock may have moved back).
     this.#hlc.observe(db.get<{ h: string | null }>('SELECT max(hlc) AS h FROM sync_clock')?.h)
     // Link phrases are derived from text: fill them in after an upgrade or a change in how they're guessed.
@@ -2048,6 +2053,27 @@ export class Store {
       created_at: r.created_at,
       pos: pe ? { p: pe.src, k: pe.sort_key } : { p: null, k: r.sort_key },
     }
+  }
+
+  /** Restamp sync_clock rows whose clock is malformed or implausibly far ahead.
+   *  Idempotent and cheap in the normal case (one scan, no writes). */
+  #repairSyncClocks(now = Date.now()) {
+    const rows = this.db.all<{ node: string; field: string; hlc: string }>('SELECT node, field, hlc FROM sync_clock')
+    const bad = rows.filter((r) => {
+      if (r.hlc === ZERO_HLC) return false // untouched seed rows: a sentinel, not poison
+      if (!HLC_RE.test(r.hlc)) return true
+      return !(parseInt(r.hlc.slice(0, 9), 36) <= now + Hlc.MAX_SKEW)
+    })
+    if (!bad.length) return
+    this.db.tx(() => {
+      bad.forEach((r, i) =>
+        this.db.exec('UPDATE sync_clock SET hlc = ? WHERE node = ? AND field = ?', [
+          formatHlc(now + i, 0, this.#hlc.device),
+          r.node,
+          r.field,
+        ]),
+      )
+    })
   }
 
   syncInfo(): SyncInfo {

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { SyncServer } from '../server/sync-server.mjs'
 import { syncOnce, type Transport } from '../src/db/sync'
-import type { Store } from '../src/db/store'
+import { Store } from '../src/db/store'
 import type { SyncChange } from '../src/db/types'
 import { makeToken } from '../src/lib/tokens'
 import { makeDb, makeStore, shape } from './helpers'
@@ -522,5 +522,55 @@ describe('Hlc.observe clamp', () => {
     // the device's own ticks stay plausible (wall <= now), not the far-future one
     const [w] = h.tick().split('-')
     expect(parseInt(w, 36)).toBeLessThanOrEqual(now + 2000)
+  })
+})
+
+describe('client-side clock repair + rejection surfacing', () => {
+  const wallAt = (ms: number) => ms.toString(36).padStart(9, '0')
+
+  it('counts changes the server rejects instead of acking them silently', async () => {
+    const server = makeServer()
+    const a = await device(server)
+    const pad = a.s.createPad('P')
+    await a.sync()
+    // a pending local edit stamped far beyond the skew bound: the patched
+    // server refuses it, and the device must say so rather than ack blindly
+    const far = wallAt(Date.now() + 49 * 60 * 60 * 1000)
+    a.s.db.exec('INSERT OR REPLACE INTO sync_clock (node, field, hlc, local) VALUES (?, ?, ?, 1)', [
+      pad,
+      'text',
+      `${far}-0000-${a.s.syncInfo().deviceId}`,
+    ])
+    const result = await a.sync()
+    expect(result.rejected).toBe(1)
+  })
+
+  it('restamps poisoned sync_clock rows when the store opens', async () => {
+    const db = await makeDb()
+    const first = await makeStore({ db })
+    const pad = first.createPad('Seed')
+    first.createChild(pad, undefined, { text: 'line' })
+    // poison exactly as the pre-validation server would have sent: a malformed
+    // clock and a far-future one, on rows this device has already acked
+    first.db.exec("UPDATE sync_clock SET hlc = '~' WHERE field = 'text'")
+    const far = wallAt(Date.now() + 49 * 60 * 60 * 1000)
+    first.db.exec("UPDATE sync_clock SET hlc = ? WHERE field = 'done'", [far + '-0000-d1'])
+    // reopening the store runs the repair
+    const second = new Store(db, { now: () => Date.now() })
+    // the two poisoned rows are restamped to well-formed, plausible clocks...
+    const rows = second.db.all<{ hlc: string }>(
+      "SELECT hlc FROM sync_clock WHERE node = ? AND field IN ('text', 'done')",
+      [pad],
+    )
+    expect(rows.length).toBe(2)
+    for (const r of rows) {
+      expect(r.hlc).toMatch(/^[0-9a-z]{9}-[0-9a-z]{4}-[0-9a-z]+$/)
+      expect(parseInt(r.hlc.slice(0, 9), 36)).toBeLessThanOrEqual(Date.now() + 5000)
+    }
+    // ...while the untouched welcome pad keeps its ZERO_HLC sentinel ('0')
+    const sentinel = second.db.get<{ hlc: string }>(
+      "SELECT hlc FROM sync_clock WHERE hlc = '0' LIMIT 1",
+    )
+    expect(sentinel?.hlc).toBe('0')
   })
 })
